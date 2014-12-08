@@ -136,53 +136,7 @@ public class IR2JConverter implements Opcodes {
                 Value v2 = e2.op2;
                 switch (v1.vt) {
                 case LOCAL:
-
-                    Local local = ((Local) v1);
-                    int i = local._ls_index;
-
-                    if (v2.vt == VT.LOCAL && (i == ((Local) v2)._ls_index)) {//
-                        continue;
-                    }
-
-                    boolean skipOrg = false;
-                    if (v1.valueType.charAt(0) == 'I') {// check for IINC
-                        if (v2.vt == VT.ADD) {
-                            E2Expr e = (E2Expr) v2;
-                            if ((e.op1 == local && e.op2.vt == VT.CONSTANT)
-                                    || (e.op2 == local && e.op1.vt == VT.CONSTANT)) {
-                                int increment = (Integer) ((Constant) (e.op1 == local ? e.op2 : e.op1)).value;
-                                if (increment >= Short.MIN_VALUE && increment <= Short.MAX_VALUE) {
-                                    asm.visitIincInsn(i, increment);
-                                    skipOrg = true;
-                                }
-                            }
-                        } else if (v2.vt == VT.SUB) {
-                            E2Expr e = (E2Expr) v2;
-                            if (e.op1 == local && e.op2.vt == VT.CONSTANT) {
-                                int increment = -(Integer) ((Constant) e.op2).value;
-                                if (increment >= Short.MIN_VALUE && increment <= Short.MAX_VALUE) {
-                                    asm.visitIincInsn(i, increment);
-                                    skipOrg = true;
-                                }
-                            }
-                        }
-                    }
-                    if (!skipOrg) {
-                        accept(v2, asm);
-                        if (i >= 0) {
-                            asm.visitVarInsn(getOpcode(v1, ISTORE), i);
-                        } else if (!v1.valueType.equals("V")) { // skip void type locals
-                            switch (v1.valueType.charAt(0)) {
-                            case 'J':
-                            case 'D':
-                                asm.visitInsn(POP2);
-                                break;
-                            default:
-                                asm.visitInsn(POP);
-                                break;
-                            }
-                        }
-                    }
+                    rebuildAssignToLocal((Local) v1, v2, asm);
                     break;
                 case STATIC_FIELD: {
                     StaticFieldExpr fe = (StaticFieldExpr) v1;
@@ -215,6 +169,10 @@ public class IR2JConverter implements Opcodes {
                     }
                     break;
                 }
+            }
+                break;
+            case VAR_START: {
+                rebuildAssignToLocal((Local) st.getOp1(), st.getOp2(), asm);
             }
                 break;
             case IDENTITY: {
@@ -378,6 +336,54 @@ public class IR2JConverter implements Opcodes {
                 throw new RuntimeException("not support st: " + st.st);
             }
 
+        }
+    }
+
+    private void rebuildAssignToLocal(Local local, Value v2, MethodVisitor asm) {
+        int i = local._ls_index;
+
+        if (v2.vt == VT.LOCAL && (i == ((Local) v2)._ls_index)) {//
+            return;
+        }
+
+        boolean skipOrg = false;
+        if (local.valueType.charAt(0) == 'I') {// check for IINC
+            if (v2.vt == VT.ADD) {
+                E2Expr e = (E2Expr) v2;
+                if ((e.op1 == local && e.op2.vt == VT.CONSTANT)
+                        || (e.op2 == local && e.op1.vt == VT.CONSTANT)) {
+                    int increment = (Integer) ((Constant) (e.op1 == local ? e.op2 : e.op1)).value;
+                    if (increment >= Short.MIN_VALUE && increment <= Short.MAX_VALUE) {
+                        asm.visitIincInsn(i, increment);
+                        skipOrg = true;
+                    }
+                }
+            } else if (v2.vt == VT.SUB) {
+                E2Expr e = (E2Expr) v2;
+                if (e.op1 == local && e.op2.vt == VT.CONSTANT) {
+                    int increment = -(Integer) ((Constant) e.op2).value;
+                    if (increment >= Short.MIN_VALUE && increment <= Short.MAX_VALUE) {
+                        asm.visitIincInsn(i, increment);
+                        skipOrg = true;
+                    }
+                }
+            }
+        }
+        if (!skipOrg) {
+            accept(v2, asm);
+            if (i >= 0) {
+                asm.visitVarInsn(getOpcode(local, ISTORE), i);
+            } else if (!local.valueType.equals("V")) { // skip void type locals
+                switch (local.valueType.charAt(0)) {
+                case 'J':
+                case 'D':
+                    asm.visitInsn(POP2);
+                    break;
+                default:
+                    asm.visitInsn(POP);
+                    break;
+                }
+            }
         }
     }
 

@@ -299,7 +299,7 @@ public class UnSSATransformer implements Transformer {
 
         Set<Stmt> tos = new HashSet<>();
         for (Stmt stmt : method.stmts) {
-            if ((stmt.st == ST.ASSIGN || stmt.st == ST.IDENTITY) && stmt.getOp1().vt == VT.LOCAL) {
+            if ((stmt.st == ST.ASSIGN || stmt.st == ST.IDENTITY || stmt.st == ST.VAR_START) && stmt.getOp1().vt == VT.LOCAL) {
                 Local localAssignTo = (Local) stmt.getOp1();
                 RegAssign regAssignTo = (RegAssign) localAssignTo.tag;
                 Set<Integer> excludeIdx = new HashSet<>();

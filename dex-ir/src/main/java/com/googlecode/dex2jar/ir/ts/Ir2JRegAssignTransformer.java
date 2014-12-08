@@ -25,6 +25,7 @@ import com.googlecode.dex2jar.ir.expr.Value;
 import com.googlecode.dex2jar.ir.expr.Value.VT;
 import com.googlecode.dex2jar.ir.stmt.Stmt;
 import com.googlecode.dex2jar.ir.stmt.Stmt.ST;
+import com.googlecode.dex2jar.ir.stmt.VarStartStmt;
 import com.googlecode.dex2jar.ir.ts.an.SimpleLiveAnalyze;
 import com.googlecode.dex2jar.ir.ts.an.SimpleLiveValue;
 
@@ -58,7 +59,7 @@ public class Ir2JRegAssignTransformer implements Transformer {
         }
     };
 
-    private Reg[] genGraph(IrMethod method, final Reg[] regs) {
+    private Reg[] genGraph(IrMethod method, final Reg[] regs, Set<Reg> canHaveSameIndexWithThis) {
         Reg args[];
         if (method.isStatic) {
             args = new Reg[method.args.length];
@@ -66,9 +67,13 @@ public class Ir2JRegAssignTransformer implements Transformer {
             args = new Reg[method.args.length + 1];
         }
 
+        List<VarStartStmt> varStartStmts=new ArrayList<>();
         Set<Stmt> tos = new HashSet<>();
         for (Stmt stmt : method.stmts) {
-            if (stmt.st == ST.ASSIGN || stmt.st == ST.IDENTITY) {
+            if (!method.isStatic && stmt.st == ST.VAR_START && stmt.getOp2().vt == VT.LOCAL) {
+                varStartStmts.add((VarStartStmt) stmt);
+            }
+            if (stmt.st == ST.ASSIGN || stmt.st == ST.IDENTITY || stmt.st == ST.VAR_START) {
                 if (stmt.getOp1().vt == VT.LOCAL) {
                     Local left = (Local) stmt.getOp1();
                     Value op2 = stmt.getOp2();
@@ -114,6 +119,16 @@ public class Ir2JRegAssignTransformer implements Transformer {
                             args[refExpr.parameterIndex + 1] = leftReg;
                         }
                     }
+                }
+            }
+        }
+
+        if (!method.isStatic) {
+            Reg thiz = args[0];
+            for (VarStartStmt vss : varStartStmts) {
+                Local right = (Local) vss.getOp2();
+                if (thiz == regs[ right._ls_index]) {
+                    canHaveSameIndexWithThis.add(regs[vss.getLeft()._ls_index]);
                 }
             }
         }
@@ -195,14 +210,15 @@ public class Ir2JRegAssignTransformer implements Transformer {
             regs[local._ls_index] = reg;
         }
 
+        Set<Reg> canHaveSameIndexWithThis=new HashSet<>();
         // gen graph
-        Reg[] args = genGraph(method, regs);
+        Reg[] args = genGraph(method, regs, canHaveSameIndexWithThis);
 
         // fix up the graph, make sure @this is not share index with others
         if (!method.isStatic) {
             Reg atThis = args[0];
             for (Reg reg : regs) {
-                if (reg == atThis) {
+                if (reg == atThis || canHaveSameIndexWithThis.contains(reg)) {
                     continue;
                 }
                 reg.excludes.add(atThis);

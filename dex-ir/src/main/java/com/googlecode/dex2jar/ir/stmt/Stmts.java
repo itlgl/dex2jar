@@ -15,6 +15,7 @@
  */
 package com.googlecode.dex2jar.ir.stmt;
 
+import com.googlecode.dex2jar.ir.expr.Local;
 import com.googlecode.dex2jar.ir.expr.Value;
 import com.googlecode.dex2jar.ir.stmt.Stmt.ST;
 
@@ -79,6 +80,10 @@ public final class Stmts {
 
     public static VoidInvokeStmt nVoidInvoke(Value op) {
         return new VoidInvokeStmt(op);
+    }
+
+    public static VarStartStmt nVarStart(Local left, Value right, String name, String type, String signature) {
+        return new VarStartStmt(left, right, name, type, signature);
     }
 
     private Stmts() {

@@ -81,7 +81,7 @@ public class DeadCodeTransformer implements Transformer {
                 it.remove();
                 continue;
             }
-            if (p.st == Stmt.ST.ASSIGN || p.st == Stmt.ST.IDENTITY) {
+            if (p.st == Stmt.ST.ASSIGN || p.st == Stmt.ST.IDENTITY || p.st == Stmt.ST.VAR_START) {
                 if (p.getOp1().vt == Value.VT.LOCAL) {
                     definedLocals.add((Local) p.getOp1());
                 }

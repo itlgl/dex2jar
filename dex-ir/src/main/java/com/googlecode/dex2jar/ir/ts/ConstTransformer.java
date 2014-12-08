@@ -156,7 +156,7 @@ public class ConstTransformer implements Transformer {
 
     private void collect(IrMethod m) {
         for (Stmt p = m.stmts.getFirst(); p != null; p = p.getNext()) {
-            if (p.st == ST.ASSIGN || p.st == ST.IDENTITY) {
+            if (p.st == ST.ASSIGN) {
                 E2Stmt e2 = (E2Stmt) p;
                 Value op1 = e2.op1.trim();
                 Value op2 = e2.op2.trim();
@@ -181,6 +181,12 @@ public class ConstTransformer implements Transformer {
                     } else {
                         cav.isConst = Boolean.FALSE;
                     }
+                }
+            } else if (p.st == ST.IDENTITY || p.st == ST.VAR_START) {
+                Value op1 = p.getOp1().trim();
+                if (op1.vt == VT.LOCAL) {
+                    ConstAnalyzeValue cav = (ConstAnalyzeValue) ((Local) op1).tag;
+                    cav.isConst = Boolean.FALSE;
                 }
             }
         }

@@ -38,6 +38,7 @@ public class AggTransformer extends StatedTransformer {
                 case LABEL:
                 case GOTO:
                 case IDENTITY:
+                case VAR_START:
                 case FILL_ARRAY_DATA:
                 case NOP:
                 case RETURN_VOID:

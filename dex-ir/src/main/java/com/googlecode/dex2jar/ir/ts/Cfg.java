@@ -354,7 +354,7 @@ public class Cfg {
             break;
         case E2:
             Value e2op1 = p.getOp1();
-            if (e2op1.vt == VT.LOCAL && (p.st == ST.ASSIGN || p.st == ST.IDENTITY)) {
+            if (e2op1.vt == VT.LOCAL && (p.st == ST.ASSIGN || p.st == ST.IDENTITY || p.st == ST.VAR_START)) {
                 p.setOp2(travelMod(p.getOp2(), callback));
                 p.setOp1(callback.onAssign((Local) e2op1, (AssignStmt) p));
             } else {
@@ -383,7 +383,7 @@ public class Cfg {
             break;
         case E2:
             Value e2op1 = p.getOp1();
-            if (e2op1.vt == VT.LOCAL && (p.st == ST.ASSIGN || p.st == ST.IDENTITY)) {
+            if (e2op1.vt == VT.LOCAL && (p.st == ST.ASSIGN || p.st == ST.IDENTITY || p.st == ST.VAR_START)) {
                 travel(p.getOp2(), callback);
                 callback.onAssign((Local) e2op1, (AssignStmt) p);
             } else {

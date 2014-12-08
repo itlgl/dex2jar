@@ -58,8 +58,10 @@ import static com.googlecode.dex2jar.ir.stmt.Stmts.*;
 import java.util.*;
 
 import com.googlecode.d2j.node.DexCodeNode;
+import com.googlecode.d2j.node.DexDebugNode;
 import com.googlecode.d2j.visitors.DexDebugVisitor;
 import com.googlecode.dex2jar.ir.TypeClass;
+import com.googlecode.dex2jar.ir.stmt.*;
 import org.objectweb.asm.Opcodes;
 
 import com.googlecode.d2j.DexLabel;
@@ -74,10 +76,6 @@ import com.googlecode.dex2jar.ir.Trap;
 import com.googlecode.dex2jar.ir.expr.Exprs;
 import com.googlecode.dex2jar.ir.expr.Local;
 import com.googlecode.dex2jar.ir.expr.Value;
-import com.googlecode.dex2jar.ir.stmt.LabelStmt;
-import com.googlecode.dex2jar.ir.stmt.Stmt;
-import com.googlecode.dex2jar.ir.stmt.StmtList;
-import com.googlecode.dex2jar.ir.stmt.Stmts;
 
 /**
  * @author <a href="mailto:pxb1988@gmail.com">Panxiaobo</a>
@@ -916,6 +914,10 @@ public class Dex2IrAdapter extends DexCodeVisitor implements Opcodes, DexConstan
         if (codeNode.totalRegister >= 0) {
             this.visitRegister(codeNode.totalRegister);
         }
+        DexLabel start = null;
+        if (codeNode.debugNode != null) {
+            start = findOrCreateFirstLabel(codeNode.stmts);
+        }
         for (DexCodeNode.DexStmtNode n : codeNode.stmts) {
             n.accept(this);
             if (n instanceof DexCodeNode.FilledNewArrayStmtNode) {
@@ -926,8 +928,111 @@ public class Dex2IrAdapter extends DexCodeVisitor implements Opcodes, DexConstan
                 lastIsInvokeOrFilledNewArray = false;
             }
         }
-
+        if (codeNode.debugNode != null) {
+            appendDebugInfo(codeNode.debugNode, codeNode.totalRegister, start);
+        }
         visitEnd();
         return irMethod;
     }
+
+    private DexLabel findOrCreateFirstLabel(List<DexCodeNode.DexStmtNode> stmts) {
+        if (stmts.size() > 0 && stmts.get(0) instanceof DexCodeNode.DexLabelStmtNode) {
+            return ((DexCodeNode.DexLabelStmtNode) stmts.get(0)).label;
+        }
+        DexLabel dexLabel = new DexLabel();
+        visitLabel(dexLabel);
+        return dexLabel;
+    }
+
+    void insertVarStart(LabelStmt pos, VarStartStmt vss) {
+        Stmt p = pos;
+        for (Stmt q = p.getNext(); q != null; q = q.getNext()) {
+            if (q.st != Stmt.ST.LABEL && q.st != Stmt.ST.IDENTITY) {
+                break;
+            }
+            p = q;
+        }
+        list.insertAfter(p, vss);
+    }
+
+    void appendDebugInfo(DexDebugNode debug, int totalRegisters, DexLabel start) {
+        final Var vars[] = new Var[totalRegisters];
+        for (int i = 0; i < totalRegisters; i++) {
+            Var var = new Var(i);
+            vars[i] = var;
+        }
+
+        LabelStmt firstLabelStmt = toLabelStmt(start);
+        int nextReg = totalRegisters - countParameterRegisters(method, isStatic);
+        if (!isStatic) {// is not static
+            Var var = vars[nextReg];
+            var.name = "this";
+            var.type = method.getOwner();
+            insertVarStart(firstLabelStmt, Stmts.nVarStart(locals[nextReg], locals[nextReg], var.name, var.type, var.signature));
+            nextReg++;
+        }
+        String[] args = method.getParameterTypes();
+        for (int i = 0; i < args.length; i++) {
+            String t = args[i];
+            Var var = vars[nextReg];
+            List<String> parameterNames = debug.parameterNames;
+            if (parameterNames == null || parameterNames.size() <= i || parameterNames.get(i) == null) {
+                var.name = "_p" + i;
+            } else {
+                var.name = debug.parameterNames.get(i);
+            }
+            var.type = t;
+            insertVarStart(firstLabelStmt, Stmts.nVarStart(locals[nextReg], locals[nextReg], var.name, var.type, var.signature));
+            nextReg++;
+            if (t.equals("J") || t.equals("D")) {
+                nextReg++;
+            }
+        }
+        debug.accept(new DexDebugVisitor() {
+            @Override
+            public void visitLineNumber(int line, DexLabel label) {
+                toLabelStmt(label).lineNumber = line;
+            }
+
+            @Override
+            public void visitRestartLocal(int reg, DexLabel label) {
+                LabelStmt labelStmt = toLabelStmt(label);
+                Var var = vars[reg];
+                insertVarStart(labelStmt, Stmts.nVarStart(locals[reg], locals[reg], var.name, var.type, var.signature));
+            }
+
+            @Override
+            public void visitStartLocal(int reg, DexLabel label, String name, String type, String signature) {
+
+                LabelStmt labelStmt = toLabelStmt(label);
+                Var var = vars[reg];
+                var.name = name;
+                var.type = type;
+                var.signature = signature;
+                insertVarStart(labelStmt, Stmts.nVarStart(locals[reg], locals[reg], var.name, var.type, var.signature));
+            }
+        });
+
+    }
+
+    static class Var implements Cloneable {
+        public Var(int index) {
+            this.index = index;
+        }
+
+        public Var(int index, String name, String type, String signature) {
+            this.index = index;
+            this.name = name;
+            this.type = type;
+            this.signature = signature;
+        }
+
+        public int index;
+        public String name, type, signature;
+
+        public Var clone() {
+            return new Var(this.index, this.name, this.type, this.signature);
+        }
+    }
+
 }

@@ -41,7 +41,6 @@ public class IrMethod {
     public StmtList stmts = new StmtList();
 
     public List<Trap> traps = new ArrayList<Trap>();
-    public List<LocalVar> vars = new ArrayList<LocalVar>();
     public List<LabelStmt> phiLabels;
 
     public IrMethod clone() {
@@ -55,9 +54,6 @@ public class IrMethod {
         n.stmts = stmts.clone(mapper);
         for (Trap trap : traps) {
             n.traps.add(trap.clone(mapper));
-        }
-        for (LocalVar var : vars) {
-            n.vars.add(var.clone(mapper));
         }
         if (phiLabels != null) {
             List<LabelStmt> nPhiLabels = new ArrayList<>(phiLabels.size());
@@ -92,13 +88,10 @@ public class IrMethod {
             }
         }
         sb.append(") {\n\n").append(stmts).append("\n");
-        if (traps.size() > 0 || vars.size() > 0) {
+        if (traps.size() > 0) {
             sb.append("=============\n");
             for (Trap trap : traps) {
                 sb.append(trap).append('\n');
-            }
-            for (LocalVar var : vars) {
-                sb.append(var).append('\n');
             }
         }
         sb.append("}");

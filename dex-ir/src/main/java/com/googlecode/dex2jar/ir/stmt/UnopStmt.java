@@ -41,8 +41,6 @@ public class UnopStmt extends E1Stmt {
             return "throw " + op;
         case RETURN:
             return "return " + op;
-        case LOCAL_END:
-            return op + " ::END";
         default:
         }
         return super.toString();

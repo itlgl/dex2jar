@@ -45,7 +45,7 @@ public class AssignStmt extends E2Stmt {
         switch (st) {
         case ASSIGN:
             return op1 + " = " + op2;
-        case LOCAL_START:
+        case VAR_START:
         case IDENTITY:
             return op1 + " := " + op2;
         case FILL_ARRAY_DATA:

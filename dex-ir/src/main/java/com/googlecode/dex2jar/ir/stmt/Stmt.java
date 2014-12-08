@@ -118,8 +118,7 @@ public abstract class Stmt {
      */
     public static enum ST {
 
-        LOCAL_START(CAN_CONTINUE), // same as ASSIGN but left must keep and must be local
-        LOCAL_END(CAN_CONTINUE), // must keep and op must be local
+        VAR_START(CAN_CONTINUE), // same as ASSIGN but left must keep and must be local
         ASSIGN(CAN_CONTINUE | MAY_THROW), IDENTITY(CAN_CONTINUE), LABEL(CAN_CONTINUE), LOCK(CAN_CONTINUE | CAN_THROW), NOP(
                 CAN_CONTINUE), UNLOCK(CAN_CONTINUE | CAN_THROW), VOID_INVOKE(CAN_CONTINUE | CAN_THROW), FILL_ARRAY_DATA(
                 CAN_CONTINUE | CAN_THROW), //

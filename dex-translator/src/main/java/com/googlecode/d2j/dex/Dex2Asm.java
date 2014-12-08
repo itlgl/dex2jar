@@ -87,7 +87,7 @@ public class Dex2Asm {
     protected static final ZeroTransformer T_zero = new ZeroTransformer();
     protected static final VoidInvokeTransformer T_voidInvoke = new VoidInvokeTransformer();
     protected static final NpeTransformer T_npe = new NpeTransformer();
-
+    protected static final RemoveVarFromSSA t_removeVar = new RemoveVarFromSSA();
     static private int clearClassAccess(boolean isInner, int access) {
         if ((access & Opcodes.ACC_INTERFACE) == 0) { // issue 55
             access |= Opcodes.ACC_SUPER;// 解决生成的class文件使用dx重新转换时使用的指令与原始指令不同的问题
@@ -554,11 +554,13 @@ public class Dex2Asm {
         // T_topologicalSort.transform(irMethod);
         T_ssa.transform(irMethod);
         T_deadCode.transform(irMethod);
+        t_removeVar.transform(irMethod);
         T_removeLocal.transform(irMethod);
         T_removeConst.transform(irMethod);
         T_zero.transform(irMethod);
         if (T_npe.transformReportChanged(irMethod)) {
             T_deadCode.transform(irMethod);
+            t_removeVar.transform(irMethod);
             T_removeLocal.transform(irMethod);
             T_removeConst.transform(irMethod);
         }
