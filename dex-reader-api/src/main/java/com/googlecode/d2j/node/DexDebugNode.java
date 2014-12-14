@@ -84,6 +84,7 @@ public class DexDebugNode extends DexDebugVisitor {
         if (fineName != null) {
             v.visitSetFile(fineName);
         }
+        v.visitEnd();
     }
 
     @Override

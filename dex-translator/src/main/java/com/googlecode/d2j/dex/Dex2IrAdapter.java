@@ -62,6 +62,8 @@ import com.googlecode.d2j.node.DexDebugNode;
 import com.googlecode.d2j.visitors.DexDebugVisitor;
 import com.googlecode.dex2jar.ir.TypeClass;
 import com.googlecode.dex2jar.ir.stmt.*;
+import com.googlecode.dex2jar.ir.ts.an.SimpleLiveAnalyze;
+import com.googlecode.dex2jar.ir.ts.an.SimpleLiveValue;
 import org.objectweb.asm.Opcodes;
 
 import com.googlecode.d2j.DexLabel;
@@ -451,9 +453,6 @@ public class Dex2IrAdapter extends DexCodeVisitor implements Opcodes, DexConstan
      */
     @Override
     public void visitEnd() {
-        irMethod.locals.addAll(Arrays.asList(this.locals));
-        irMethod.locals.add(tmpLocal);
-        this.locals = null;
     }
 
     @Override
@@ -928,10 +927,14 @@ public class Dex2IrAdapter extends DexCodeVisitor implements Opcodes, DexConstan
                 lastIsInvokeOrFilledNewArray = false;
             }
         }
+
+        visitEnd();
+        irMethod.locals.addAll(Arrays.asList(this.locals));
+        irMethod.locals.add(tmpLocal);
         if (codeNode.debugNode != null) {
             appendDebugInfo(codeNode.debugNode, codeNode.totalRegister, start);
         }
-        visitEnd();
+        this.locals = null;
         return irMethod;
     }
 
@@ -944,18 +947,9 @@ public class Dex2IrAdapter extends DexCodeVisitor implements Opcodes, DexConstan
         return dexLabel;
     }
 
-    void insertVarStart(LabelStmt pos, VarStartStmt vss) {
-        Stmt p = pos;
-        for (Stmt q = p.getNext(); q != null; q = q.getNext()) {
-            if (q.st != Stmt.ST.LABEL && q.st != Stmt.ST.IDENTITY) {
-                break;
-            }
-            p = q;
-        }
-        list.insertAfter(p, vss);
-    }
-
     void appendDebugInfo(DexDebugNode debug, int totalRegisters, DexLabel start) {
+        new SimpleLiveAnalyze(irMethod, false).analyze();
+
         final Var vars[] = new Var[totalRegisters];
         for (int i = 0; i < totalRegisters; i++) {
             Var var = new Var(i);
@@ -968,7 +962,8 @@ public class Dex2IrAdapter extends DexCodeVisitor implements Opcodes, DexConstan
             Var var = vars[nextReg];
             var.name = "this";
             var.type = method.getOwner();
-            insertVarStart(firstLabelStmt, Stmts.nVarStart(locals[nextReg], locals[nextReg], var.name, var.type, var.signature));
+            var.start = firstLabelStmt;
+            var.visited = false;
             nextReg++;
         }
         String[] args = method.getParameterTypes();
@@ -982,7 +977,8 @@ public class Dex2IrAdapter extends DexCodeVisitor implements Opcodes, DexConstan
                 var.name = debug.parameterNames.get(i);
             }
             var.type = t;
-            insertVarStart(firstLabelStmt, Stmts.nVarStart(locals[nextReg], locals[nextReg], var.name, var.type, var.signature));
+            var.start = firstLabelStmt;
+            var.visited = false;
             nextReg++;
             if (t.equals("J") || t.equals("D")) {
                 nextReg++;
@@ -998,21 +994,79 @@ public class Dex2IrAdapter extends DexCodeVisitor implements Opcodes, DexConstan
             public void visitRestartLocal(int reg, DexLabel label) {
                 LabelStmt labelStmt = toLabelStmt(label);
                 Var var = vars[reg];
-                insertVarStart(labelStmt, Stmts.nVarStart(locals[reg], locals[reg], var.name, var.type, var.signature));
+                var.start = labelStmt;
+                var.visited = false;
+            }
+
+            @Override
+            public void visitEndLocal(int reg, DexLabel label) {
+                Var var = vars[reg];
+                LabelStmt labelStmt = toLabelStmt(label);
+                insert(var.start, labelStmt, var);
+                var.visited = true;
+                var.start = null;
+            }
+
+            private void insert(LabelStmt start, LabelStmt end, Var var) {
+                int index = var.index;
+                for (Stmt p = start; p != end && p != null; p = p.getNext()) {
+                    if (p.st == Stmt.ST.LABEL) {
+                        if (live(p, index)) {
+                            insert0(p, index, var);
+                        }
+                    } else if (p.st == Stmt.ST.ASSIGN || p.st == Stmt.ST.IDENTITY) {
+                        if (p.getOp1().vt == Value.VT.LOCAL) {
+                            Local left = (Local) p.getOp1();
+                            if (left._ls_index == index) {
+                                insert0(p, index, var);
+                            }
+                        }
+                    }
+                }
+            }
+
+            private boolean live(Stmt p, int index) {
+                SimpleLiveValue frame[] = (SimpleLiveValue[]) p.frame;
+                if (frame != null) {
+                    SimpleLiveValue v = frame[index];
+                    if (v != null) {
+                        return v.used;
+                    }
+                }
+                return false;
+            }
+
+            private void insert0(Stmt p, int index, Var var) {
+                Stmt x = var.create(locals[index]);
+                irMethod.stmts.insertAfter(p, x);
+                x.frame = p.frame;
+            }
+
+            @Override
+            public void visitEnd() {
+                for (Var var : vars) {
+                    if (!var.visited) {
+                        insert(var.start, null, var);
+                    }
+                }
             }
 
             @Override
             public void visitStartLocal(int reg, DexLabel label, String name, String type, String signature) {
-
                 LabelStmt labelStmt = toLabelStmt(label);
                 Var var = vars[reg];
                 var.name = name;
                 var.type = type;
                 var.signature = signature;
-                insertVarStart(labelStmt, Stmts.nVarStart(locals[reg], locals[reg], var.name, var.type, var.signature));
+                var.start = labelStmt;
+                var.visited = false;
             }
         });
 
+        // clean up;
+        for (Stmt p : irMethod.stmts) {
+            p.frame = null;
+        }
     }
 
     static class Var implements Cloneable {
@@ -1027,6 +1081,12 @@ public class Dex2IrAdapter extends DexCodeVisitor implements Opcodes, DexConstan
             this.signature = signature;
         }
 
+        public VarStartStmt create(Local local) {
+            return nVarStart(local, local, name, type, signature);
+        }
+
+        public LabelStmt start;
+        public boolean visited = true;
         public int index;
         public String name, type, signature;
 
